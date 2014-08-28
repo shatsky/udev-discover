@@ -25,6 +25,7 @@ import sys
 from gi.repository import Gtk, Gdk
 from gi.repository import GObject
 import logging
+from contextlib import contextmanager
 
 from udevdiscover import DeviceFinder, get_subsystems
 from udevdiscover.utils import GConfStore, TextBufferHandler
@@ -310,6 +311,22 @@ class UDevDiscoverGUI(GConfStore):
         self.eventslog_vpaned.set_position(self.options['eventslog_vpaned'])
         self.eventslog_expander.set_expanded(self.options['eventslog_expanded'])
 
+    # Wrapper to restore treeview cursor on previously chosen element after the tree is changed
+    # Element is identified by PATH_COL
+    # If the path is supplied, cursor will be restored only if it was on element with this path
+    # (can be used to re-run cursor_changed handler on an updated element if it was selected)
+    @contextmanager
+    def preserve_cursor(self, path=None):
+        model, selected = self.devices_tv.get_selection().get_selected()
+        if selected:
+            row = model[selected]
+            selected_path = row[PATH_COL]
+            yield
+            if (path == None or path == selected_path) and self.rows.has_key(selected_path):
+                self.devices_tv.expand_to_path(self.rows[selected_path].get_path())
+                self.devices_tv.set_cursor(self.rows[selected_path].get_path(), None, False)
+        else: yield
+
     def new_device(self, device_finder, device):
         row_ref = self.add_new_device(device)
 
@@ -432,7 +449,8 @@ class UDevDiscoverGUI(GConfStore):
         if action.get_active():
             self.devices_tv.expand_all()
         else:
-            self.devices_tv.collapse_all()
+            with self.preserve_cursor():
+                self.devices_tv.collapse_all()
 
         self.options['expanded'] = self.expand_toggleaction.get_active()
 
@@ -443,12 +461,14 @@ class UDevDiscoverGUI(GConfStore):
         self.options['followchanged'] = self.followchanged_toggleaction.get_active()
 
     def reload_action_activate_cb(self, widget=None):
-        self.device_finder.scan_subsystems(
-            self.subsys_dialog.get_chosen_subsystems(),
-            self.options['parent_tree'])
+        with self.preserve_cursor():
+            # Flush and repopulate the tree
+            self.device_finder.scan_subsystems(
+                self.subsys_dialog.get_chosen_subsystems(),
+                self.options['parent_tree'])
 
-        self.populate(self.device_finder.get_devices())
-        self.expand_toggleaction_toggled_cb(self.expand_toggleaction)
+            self.populate(self.device_finder.get_devices())
+            self.expand_toggleaction_toggled_cb(self.expand_toggleaction)
 
     def devices_tv_cursor_changed_cb(self, treeview):
         selection = self.devices_tv.get_selection()
