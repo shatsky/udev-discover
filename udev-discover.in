@@ -311,6 +311,9 @@ class UDevDiscoverGUI(GConfStore):
         self.eventslog_vpaned.set_position(self.options['eventslog_vpaned'])
         self.eventslog_expander.set_expanded(self.options['eventslog_expanded'])
 
+    ###
+    # Generic treeview/treestore stuff
+
     # Wrapper to restore treeview cursor on previously chosen element after the tree is changed
     # Element is identified by PATH_COL
     # If the path is supplied, cursor will be restored only if it was on element with this path
@@ -327,6 +330,10 @@ class UDevDiscoverGUI(GConfStore):
                 self.devices_tv.set_cursor(self.rows[selected_path].get_path(), None, False)
         else: yield
 
+    ###
+    # Devices
+
+    # Device add/remove/change event handlers
     def new_device(self, device_finder, device):
         row_ref = self.add_new_device(device)
 
@@ -377,7 +384,7 @@ class UDevDiscoverGUI(GConfStore):
 
         self.logger.info(_('Device changed: %s') % device.nice_label)
 
-        # Log device updated info and propierties
+        # Log device updated info and properties
         for i in udevdiscover.device.find_differences(old_device, device):
             if i[0] == 'changed': self.logger.debug('%s %s, %s: %s -> %s' % i)
             else: self.logger.debug('%s %s, %s: %s' % i)
@@ -423,6 +430,9 @@ class UDevDiscoverGUI(GConfStore):
                 treerow[VISIBLE_COL] = False
 
         return self.rows[device.path]
+
+    ###
+    # Other menu actions
 
     def preferences_action_activated_cb(self, widget):
         if self.subsys_dialog.run() == Gtk.ResponseType.ACCEPT:
@@ -470,6 +480,9 @@ class UDevDiscoverGUI(GConfStore):
             self.populate(self.device_finder.get_devices())
             self.expand_toggleaction_toggled_cb(self.expand_toggleaction)
 
+    ###
+
+    # Device selected in tree
     def devices_tv_cursor_changed_cb(self, treeview):
         selection = self.devices_tv.get_selection()
         model, selected = selection.get_selected()
