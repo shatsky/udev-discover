@@ -330,6 +330,42 @@ class UDevDiscoverGUI(GConfStore):
                 self.devices_tv.set_cursor(self.rows[selected_path].get_path(), None, False)
         else: yield
 
+    # Move tree element with its subtree to another parent
+    def treestore_move(self, parent_treeiter, treeiter):
+        treestore = self.devices_treestore
+        rows = self.rows
+        new_treeiter = treestore.append(parent_treeiter, list(treestore[treeiter]))
+        rows[treestore[treeiter][PATH_COL]] = Gtk.TreeRowReference.new(treestore, treestore.get_path(new_treeiter))
+        # Traverse treeiter subtree
+        if treestore.iter_has_child(treeiter):
+            current = treestore.iter_nth_child(treeiter, 0)
+            stack = []
+            while current is not None:
+                # Process the current element
+                parent_treeiter = self.devices_treestore.get_iter(rows[treestore[treestore.iter_parent(current)][PATH_COL]].get_path())
+                rows[treestore[current][PATH_COL]] = Gtk.TreeRowReference.new(treestore, treestore.get_path(treestore.append(parent_treeiter, list(treestore[current]))))
+                # If it has children
+                if treestore.iter_has_child(current):
+                    stack.append(current)
+                    # Get first child
+                    current = treestore.iter_nth_child(current, 0)
+                # If it has next sibling
+                elif treestore.iter_next(current):
+                    current = treestore.iter_next(current)
+                else:
+                    exit = True
+                    while len(stack) > 0:
+                        current = stack.pop()
+                        if treestore.iter_next(current):
+                            current = treestore.iter_next(current)
+                            exit = False
+                            break
+                    # If we reached the top and didn't meet any element which has next sibling
+                    if exit: break
+        # TODO: does this remove all subtree objects and free the memory?
+        treestore.remove(treeiter)
+        return new_treeiter
+
     ###
     # Devices
 
