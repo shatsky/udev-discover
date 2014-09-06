@@ -228,6 +228,7 @@ class UDevDiscoverGUI(GConfStore):
                 'reload_action', 'showparents_toggleaction', 'about_dialog',
                 'deviceprop_store', 'devices_treestore', 'eventslog_textbuffer',
                 'main_window',
+                'newseat_action', 'summary_action', 'properties_action', 'newseat_dialog',
                 'multiseat_tree_menuitem', 'multiseat_tree_toggleaction']):
             raise 'Cant load %s' % UDEVDISCOVER_UI
         self.builder.connect_signals(self)
@@ -314,6 +315,24 @@ class UDevDiscoverGUI(GConfStore):
         self.devices_hpaned.set_position(self.options['devices_hpaned'])
         self.eventslog_vpaned.set_position(self.options['eventslog_vpaned'])
         self.eventslog_expander.set_expanded(self.options['eventslog_expanded'])
+
+        # Logind dbus interface
+        import dbus
+        from dbus.mainloop.glib import DBusGMainLoop
+        DBusGMainLoop(set_as_default=True)
+        logind_proxy = dbus.SystemBus().get_object('org.freedesktop.login1', '/org/freedesktop/login1')
+        logind_proxy.connect_to_signal('SeatNew', self.seat_add)
+        logind_proxy.connect_to_signal('SeatRemoved', self.seat_remove)
+        self.logind = dbus.Interface(logind_proxy, 'org.freedesktop.login1.Manager')
+        # Fill device seat menu with seat items
+        self.seat_menu_items={}
+        self.update_seat_menu()
+        # Currently-selected device
+        self.current_device_path = None
+        self.current_device_seat = None
+        # New seat dialog
+        self.newseat_dialog = self.builder.get_object('newseat_dialog')
+        self.newseat_dialog.connect('response', lambda d, r: d.hide())
 
     ###
     # Generic treeview/treestore stuff
@@ -403,6 +422,76 @@ class UDevDiscoverGUI(GConfStore):
     def multiseat_tree_toggleaction_toggled_cb(self, action):
         self.options['multiseat_tree'] = action.get_active()
         self.reload_action_activate_cb()
+
+    # Logind seat add/remove signal handlers
+    def seat_add(self, seat, seat_path):
+        # TODO: check if the seat is in tree; if yes - mark it as working
+        if seat not in self.seat_menu_items.keys(): self.add_seat_menu_item(seat)
+        self.logger.info(_('Seat added: %s') % seat)
+
+    def seat_remove(self, seat, seat_path):
+        # TODO: check if the seat is in tree; if yes - mark it as non-working
+        if seat in self.seat_menu_items.keys(): self.remove_seat_menu_item(seat)
+        self.logger.info(_('Seat removed: %s') % seat)
+
+    # Update chosen seat menu item (without triggering choose_seat)
+    def update_chosen_seat(self, seat):
+        # It can happen that device seat is not in seat list obtained from logind
+        # (none of its devices has :master-of-seat: tag)
+        # TODO: find the best way to handle this case
+        #  - add missing seat to menu (current solution; the problem is that it'll stay until the program termination)
+        #  - display only logind-valid seats, do not mark any of them as chosen one (how?)
+        if not seat in self.seat_menu_items.keys():
+            self.add_seat_menu_item(seat)
+        self.seat_menu_items[seat].handler_block_by_func(self.choose_seat)
+        self.seat_menu_items[seat].activate()
+        self.seat_menu_items[seat].handler_unblock_by_func(self.choose_seat)
+
+    # Add seat menu item
+    def add_seat_menu_item(self, seat):
+        seat_menu = self.builder.get_object('seat_menu')
+        group = (self.seat_menu_items[self.seat_menu_items.keys()[-1]].get_group() if len(self.seat_menu_items) else [])
+        menu_item = Gtk.RadioMenuItem.new_with_label(group, seat)
+        # Insert after last seat item, assuming that they are located at the top of the menu
+        seat_menu.insert(menu_item, len(self.seat_menu_items))
+        menu_item.connect('activate', self.choose_seat, seat)
+        self.seat_menu_items[seat] = menu_item
+        menu_item.show()
+
+    # Remove seat menu item
+    def remove_seat_menu_item(self, seat):
+        self.builder.get_object('seat_menu').remove(self.seat_menu_items[seat])
+        del self.seat_menu_items[seat]
+
+    # Update seat menu list
+    def update_seat_menu(self):
+        # Delete seat menu items
+        for seat in self.seat_menu_items.keys():
+            self.remove_self_menu_item(seat)
+        # Fill menu with new items
+        seats = [logind_seat[0] for logind_seat in self.logind.ListSeats()]
+        for seat in seats:
+            self.add_seat_menu_item(seat)
+
+    # Attach device to seat (if changed) and update chosen seat menu item (if succeeded)
+    def choose_seat(self, item, seat):
+        # We are called for both newly-chosen and previously-chosen items, so we check get_active() to ignore previously-chosen one
+        if item.get_active() and seat != self.current_device_seat:
+            # We can fail to attach device, so we reset chosen seat menu item to a previously-chosen one
+            self.update_chosen_seat(self.current_device_seat)
+            # Logind will take care of authorizing user if needed
+            self.logind.AttachDevice(seat, '/sys'+self.current_device_path, True)
+            # If everything went OK, we can set current seat menu item as an active one
+            #self.update_chosen_seat(seat)
+            #self.current_device_seat = seat
+            # But instead we will rely on device_changed event handler to trigger tree cursor reset which will do the rest
+
+    # Create a new seat
+    def newseat_action_activate_cb(self, entry):
+        # Show simple dialog asking for seat name
+        if self.newseat_dialog.run() == Gtk.ResponseType.ACCEPT:
+            self.logind.AttachDevice(self.builder.get_object('newseat_name_entry').get_text(), '/sys'+self.current_device_path, True)
+            # On success, seat list will be updated via NewSeat signal handler
 
     ###
     # Devices
@@ -605,6 +694,12 @@ class UDevDiscoverGUI(GConfStore):
             self.populate(self.device_finder.get_devices())
             self.expand_toggleaction_toggled_cb(self.expand_toggleaction)
 
+    def summary_menuitem_activate_cb(self, widget):
+        self.builder.get_object('notebook1').set_current_page(0)
+
+    def properties_menuitem_activate_cb(self, widget):
+        self.builder.get_object('notebook1').set_current_page(1)
+
     ###
 
     # Device selected in tree
@@ -642,6 +737,19 @@ class UDevDiscoverGUI(GConfStore):
                 for key, val in device.get_props().items():
                     self.deviceprop_store.append([key, 
                         val.decode("string-escape")])
+
+                self.builder.get_object('device_menuitem').set_sensitive(True)
+                self.current_device_path = device.get_props()['DEVPATH']
+                # If it's a seat-attachable device, we enable seat submenu and update active seat entry
+                self.current_device_seat = self.get_device_seat(device)
+                if self.current_device_seat != None:
+                    self.update_chosen_seat(self.current_device_seat)
+                    self.builder.get_object('seat_menuitem').set_sensitive(True)
+                # Otherwise, disable seat submenu
+                else:
+                    self.builder.get_object('seat_menuitem').set_sensitive(False)
+            else:
+                self.builder.get_object('device_menuitem').set_sensitive(False)
 
     def search_entry_activate_cb(self, entry):
         search_text = entry.get_text().lower()

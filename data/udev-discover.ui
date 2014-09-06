@@ -399,12 +399,112 @@
     <property name="label" translatable="yes">Multiseat tree</property>
     <signal name="toggled" handler="multiseat_tree_toggleaction_toggled_cb" swapped="no"/>
   </object>
+  <object class="GtkAction" id="newseat_action">
+    <property name="label" translatable="yes">New seat...</property>
+    <property name="short_label" translatable="yes">New</property>
+    <property name="stock_id">gtk-add</property>
+    <signal name="activate" handler="newseat_action_activate_cb" swapped="no"/>
+  </object>
+  <object class="GtkDialog" id="newseat_dialog">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">New seat</property>
+    <property name="type_hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="dialog-vbox3">
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="dialog-action_area3">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="newseat_cancel_button">
+                <property name="label">gtk-cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="newseat_ok_button">
+                <property name="label">gtk-ok</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="can_default">True</property>
+                <property name="has_default">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkPaned" id="paned1">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <child>
+              <object class="GtkLabel" id="label10">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Seat name</property>
+              </object>
+              <packing>
+                <property name="resize">False</property>
+                <property name="shrink">True</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="newseat_name_entry">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="activates_default">True</property>
+              </object>
+              <packing>
+                <property name="resize">True</property>
+                <property name="shrink">True</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-6">newseat_cancel_button</action-widget>
+      <action-widget response="-3">newseat_ok_button</action-widget>
+    </action-widgets>
+  </object>
   <object class="GtkAction" id="preferences_action">
     <property name="label" translatable="yes">Discovering preferences</property>
     <property name="short_label" translatable="yes">Discovering preferences</property>
     <property name="tooltip" translatable="yes">Choose the subsystems whose devices you want to display</property>
     <property name="stock_id">gtk-preferences</property>
     <signal name="activate" handler="preferences_action_activated_cb" swapped="no"/>
+  </object>
+  <object class="GtkAction" id="properties_action">
+    <property name="label" translatable="yes">Properties</property>
   </object>
   <object class="GtkAction" id="quit_action">
     <property name="label" translatable="yes">Quit</property>
@@ -427,6 +527,9 @@
     <property name="stock_id">gtk-sort-ascending</property>
     <property name="active">True</property>
     <signal name="toggled" handler="showparents_toggleaction_toggled_cb" swapped="no"/>
+  </object>
+  <object class="GtkAction" id="summary_action">
+    <property name="label" translatable="yes">Summary</property>
   </object>
   <object class="GtkWindow" id="main_window">
     <property name="visible">True</property>
@@ -553,6 +656,64 @@
                         <property name="can_focus">False</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="device_menuitem">
+                <property name="use_action_appearance">False</property>
+                <property name="visible">True</property>
+                <property name="sensitive">False</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">_Device</property>
+                <property name="use_underline">True</property>
+                <child type="submenu">
+                  <object class="GtkMenu" id="device_menu">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkMenuItem" id="summary_menuitem">
+                        <property name="related_action">summary_action</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="use_underline">True</property>
+                        <signal name="activate" handler="summary_menuitem_activate_cb" swapped="no"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkMenuItem" id="properties_menuitem">
+                        <property name="related_action">properties_action</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="use_underline">True</property>
+                        <signal name="activate" handler="properties_menuitem_activate_cb" swapped="no"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkMenuItem" id="seat_menuitem">
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="label" translatable="yes">Attach to seat</property>
+                        <property name="use_underline">True</property>
+                        <child type="submenu">
+                          <object class="GtkMenu" id="seat_menu">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkImageMenuItem" id="newseat_menuitem">
+                                <property name="label">gtk-add</property>
+                                <property name="related_action">newseat_action</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                                <property name="use_underline">True</property>
+                                <property name="use_stock">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
