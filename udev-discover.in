@@ -32,12 +32,12 @@ from udevdiscover.utils import GConfStore, TextBufferHandler
 import udevdiscover.device
 
 # FIXME: This path needs to be assigned at installing time
-UDEVDISCOVER_UI = '@PREFIX@/share/udev-discover/udev-discover.ui'
+UDEVDISCOVER_UI = 'data/udev-discover.ui'
 GCONF_KEY = '/apps/udevdiscover'
 
 DEFAULT_SUBSYSTEMS = ['pci', 'usb', 'net', 'power_supply', 'block', 'sound', 
     'input', 'serio', 'platform', 'drm', 'video4linux', 'rfkill', 'bluetooth',
-    'leds', 'dvb']
+    'leds', 'dvb', 'graphics']
 
 TEXTBUFFER_LOGGER = 'udevdiscover'
 LOG_LEVEL = logging.DEBUG
