@@ -614,33 +614,34 @@ class UDevDiscoverGUI(GConfStore):
 
         if selected:
             row = model[selected]
-            device = self.device_finder.get_devices_tree()[row[PATH_COL]]
+            if self.device_finder.get_devices_tree().has_key(row[PATH_COL]):
+                device = self.device_finder.get_devices_tree()[row[PATH_COL]]
 
-            title = '<b>'+device.nice_label+'</b>'
-            if hasattr(device, 'vendor_name') and device.vendor_name:
-                title += '\n<i>%s</i>' % device.vendor_name.decode('UTF-8')
-            if hasattr(device, 'model_name') and device.model_name:
-                title += '\n<i>%s</i>' % device.model_name.decode('UTF-8')
-            self.devicename_label.set_label(title)
+                title = '<b>'+device.nice_label+'</b>'
+                if hasattr(device, 'vendor_name') and device.vendor_name:
+                    title += '\n<i>%s</i>' % device.vendor_name.decode('UTF-8')
+                if hasattr(device, 'model_name') and device.model_name:
+                    title += '\n<i>%s</i>' % device.model_name.decode('UTF-8')
+                self.devicename_label.set_label(title)
 
-            desc = '\n'.join([': '.join(('<b>'+key.capitalize()+'</b>', 
-                str(val))) for key, val in device.get_info()])
-            self.devicedesc_label.set_label(desc)
-
-            self.device_image.set_from_icon_name(device.icon, Gtk.IconSize.DIALOG)
-
-            if hasattr(device, 'get_summary'):
-                self.summary_scrollwindow.set_visible(True)
                 desc = '\n'.join([': '.join(('<b>'+key.capitalize()+'</b>', 
-                    str(val))) for key, val in device.get_summary()])
-                self.devicepropsum_label.set_label(desc)
-            else:
-                self.summary_scrollwindow.set_visible(False)
+                    str(val))) for key, val in device.get_info()])
+                self.devicedesc_label.set_label(desc)
 
-            self.deviceprop_store.clear()
-            for key, val in device.get_props().items():
-                self.deviceprop_store.append([key, 
-                    val.decode("string-escape")])
+                self.device_image.set_from_icon_name(device.icon, Gtk.IconSize.DIALOG)
+
+                if hasattr(device, 'get_summary'):
+                    self.summary_scrollwindow.set_visible(True)
+                    desc = '\n'.join([': '.join(('<b>'+key.capitalize()+'</b>', 
+                        str(val))) for key, val in device.get_summary()])
+                    self.devicepropsum_label.set_label(desc)
+                else:
+                    self.summary_scrollwindow.set_visible(False)
+
+                self.deviceprop_store.clear()
+                for key, val in device.get_props().items():
+                    self.deviceprop_store.append([key, 
+                        val.decode("string-escape")])
 
     def search_entry_activate_cb(self, entry):
         search_text = entry.get_text().lower()
