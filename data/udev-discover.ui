@@ -395,6 +395,10 @@
     <property name="visible">False</property>
     <signal name="activate" handler="help_action_activate_cb" swapped="no"/>
   </object>
+  <object class="GtkToggleAction" id="multiseat_tree_toggleaction">
+    <property name="label" translatable="yes">Multiseat tree</property>
+    <signal name="toggled" handler="multiseat_tree_toggleaction_toggled_cb" swapped="no"/>
+  </object>
   <object class="GtkAction" id="preferences_action">
     <property name="label" translatable="yes">Discovering preferences</property>
     <property name="short_label" translatable="yes">Discovering preferences</property>
@@ -523,6 +527,14 @@
                     <child>
                       <object class="GtkCheckMenuItem" id="parents_menuitem">
                         <property name="related_action">showparents_toggleaction</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="use_underline">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkCheckMenuItem" id="multiseat_tree_menuitem">
+                        <property name="related_action">multiseat_tree_toggleaction</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="use_underline">True</property>

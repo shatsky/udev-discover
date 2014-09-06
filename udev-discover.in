@@ -211,7 +211,8 @@ class UDevDiscoverGUI(GConfStore):
             'follownew': True,
             'followchanged': True,
             'subsystem_preset': DEFAULT_SUBSYS_PRESET,
-            'custom_subsystem_preset': ' '.join(DEFAULT_SUBSYSTEMS)
+            'custom_subsystem_preset': ' '.join(DEFAULT_SUBSYSTEMS),
+            'multiseat_tree': True
     }
 
     def __init__(self):
@@ -226,7 +227,8 @@ class UDevDiscoverGUI(GConfStore):
                 'help_action', 'preferences_action', 'quit_action',
                 'reload_action', 'showparents_toggleaction', 'about_dialog',
                 'deviceprop_store', 'devices_treestore', 'eventslog_textbuffer',
-                'main_window']):
+                'main_window',
+                'multiseat_tree_menuitem', 'multiseat_tree_toggleaction']):
             raise 'Cant load %s' % UDEVDISCOVER_UI
         self.builder.connect_signals(self)
 
@@ -302,6 +304,8 @@ class UDevDiscoverGUI(GConfStore):
         self.expand_toggleaction_toggled_cb(self.expand_toggleaction)
         self.follownew_toggleaction.set_active(self.options['follownew'])
         self.followchanged_toggleaction.set_active(self.options['followchanged'])
+        # TODO: this seems to cause extra tree reload
+        self.builder.get_object('multiseat_tree_toggleaction').set_active(self.options['multiseat_tree'])
 
         self.search_entry.set_property('primary-icon-sensitive',False)
         self.search_entry.set_property('secondary-icon-sensitive',False)
@@ -329,6 +333,15 @@ class UDevDiscoverGUI(GConfStore):
                 self.devices_tv.expand_to_path(self.rows[selected_path].get_path())
                 self.devices_tv.set_cursor(self.rows[selected_path].get_path(), None, False)
         else: yield
+
+    # Wrapper to remove tree element if its becomes meaningless
+    # e. g., element representing a seat which has no attached devices
+    @contextmanager
+    def remove_if_obsolete(self, treeiter):
+        yield
+        if self.devices_treestore[treeiter][PATH_COL].startswith('seat://') and not self.devices_treestore.iter_has_child(treeiter):
+            del(self.rows[self.devices_treestore[treeiter][PATH_COL]])
+            self.devices_treestore.remove(treeiter)
 
     # Move tree element with its subtree to another parent
     def treestore_move(self, parent_treeiter, treeiter):
@@ -367,7 +380,76 @@ class UDevDiscoverGUI(GConfStore):
         return new_treeiter
 
     ###
+    # Seats
+
+    # Get device seat name (or None, if device is not seat-attachable)
+    def get_device_seat(self, device):
+        if device.get_props().has_key('TAGS') and ':seat:' in device.get_props()['TAGS']:
+            if device.get_props().has_key('ID_SEAT'):
+                return device.get_props()['ID_SEAT']
+            else:
+                return 'seat0'
+        else:
+            return None
+
+    # Add seat tree node
+    def add_seat_tree(self, seat):
+        # TODO: check if the seat in logind seat list; if not - mark it as non-working
+        seat_treeiter = self.devices_treestore.append(self.seats_treeiter, ['seat://'+seat, theme.load_icon('computer', 24, 0), seat, None, False, None])
+        self.rows['seat://'+seat] = Gtk.TreeRowReference.new(self.devices_treestore, self.devices_treestore.get_path(seat_treeiter))
+        return seat_treeiter
+
+    # Switch tree into multiseat mode
+    def multiseat_tree_toggleaction_toggled_cb(self, action):
+        self.options['multiseat_tree'] = action.get_active()
+        self.reload_action_activate_cb()
+
+    ###
     # Devices
+
+    # Get parent tree node for device
+    def get_device_parent_treeiter(self, device):
+        # By default, we insert device into tree without parent (as a top-level element)
+        parent_treeiter = None
+        # Some nodes in /sys/devices are not devices,
+        # e. g., for '/devices/virtual/net/lo' there are no '/devices/virtual/net', '/devices/virtual' parent devices
+        # However, we want them in treeview for clearness; but for parentless devices only,
+        # e. g. for '/devices/pci0000:00/0000:00:09.0/0000:05:07.0/sound/card1' we don't need an empty 'sound' intermediate tree node
+        if device.parent == None:
+            parent_path = device.path.rsplit('/', 1)[0]
+            parent_path_split = parent_path.split('/')
+            for i in range(3, len(parent_path_split)): # [0]/sys[1]/devices[2]/...[3:]
+                parent_path = '/'.join(parent_path_split[0:i+1])
+                if not self.rows.has_key(parent_path):
+                    parent_treeiter = self.devices_treestore.append(parent_treeiter, [parent_path, theme.load_icon('dialog-question', 24, 0), parent_path.rsplit('/', 1)[1], None, False, None])
+                    self.rows[parent_path] = Gtk.TreeRowReference.new(self.devices_treestore, self.devices_treestore.get_path(parent_treeiter))
+                else: parent_treeiter = self.devices_treestore.get_iter(self.rows[parent_path].get_path())
+        # If device has a parent device, we use it as a parent tree node
+        # We still have to check if it's in treestore; it can be missing, if its subsystem isn't in chosen_subsystems list,
+        #  and parent_tree option is disabled
+        elif self.rows.has_key(device.parent.path):
+            parent_treeiter = self.devices_treestore.get_iter(
+                self.rows[device.parent.path].get_path())
+        # If multiseat tree mode enabled,
+        if self.options['multiseat_tree']:
+            seat = self.get_device_seat(device)
+            # If device is seat-attached
+            if seat != None:
+                # If its seat is in the treeview, we check if it is under the same seat subtree as its parent tree element
+                #  to display it as a child of its parent (if true) or a direct child of its seat (if false)
+                # We cannot just check parent's device seat, because parent can be a non-seat-attachable subdevice of a seat-attached device
+                #  or not a device at all
+                if self.rows.has_key('seat://'+seat):
+                    seat_treeiter = self.devices_treestore.get_iter(self.rows['seat://'+seat].get_path())
+                    # If device has no parent or its parent is not in current-device-seat subtree - add it as a child node of its seat
+                    if parent_treeiter == None or not self.devices_treestore.is_ancestor(seat_treeiter, parent_treeiter):
+                        parent_treeiter = seat_treeiter
+                    # Otherwise, parent device node will be a parent_treeiter
+                # If its seat is not in the treeview yet - create seat tree node and use it as a parent unconditionally
+                else:
+                    parent_treeiter = self.add_seat_tree(seat)
+            # None-seat devices are always shown as children of their parent devices
+        return parent_treeiter
 
     # Device add/remove/change event handlers
     def new_device(self, device_finder, device):
@@ -389,23 +471,36 @@ class UDevDiscoverGUI(GConfStore):
         if self.rows.has_key(device.path):
             ref_row = self.rows[device.path]
             treeiter = self.devices_treestore.get_iter(ref_row.get_path())
-            self.devices_treestore.remove(treeiter)
-            del(self.rows[device.path])
+
+            with self.remove_if_obsolete(self.devices_treestore.iter_parent(treeiter)):
+                self.devices_treestore.remove(treeiter)
+                del(self.rows[device.path])
+
+        # TODO: if removed device was selected - move the cursor to its previous sibling or parent device
 
         self.logger.info(_('Device removed: %s') % device.nice_label)
 
     def changed_device(self, device_finder, device, old_device):
 
         if self.rows.has_key(device.path):
-            # Remove from tree first
             ref_row = self.rows[device.path]
             treeiter = self.devices_treestore.get_iter(ref_row.get_path())
-            # treestore.remove(treeiter) removes node with all children; we need to update without removing or move children to a new node first
-            self.devices_treestore.set(treeiter, range(6), [device.path,
-                device_icon, device.nice_label, device.subsystem, False,
-                device.name])
 
-            # Add again
+            with self.preserve_cursor(self.devices_treestore[treeiter][PATH_COL]):
+                # Parent tree element can change
+                parent_treeiter = self.get_device_parent_treeiter(device)
+                old_parent_treeiter = self.devices_treestore.iter_parent(treeiter)
+                # TODO: looks like we can't compare treeiters, treestore methods always return new treeiter objects, even if nothing is changed
+                # e. g., self.devices_treestore.iter_parent(treeiter) == self.devices_treestore.iter_parent(treeiter) will be False
+                if self.devices_treestore[parent_treeiter][PATH_COL] != self.devices_treestore[old_parent_treeiter][PATH_COL]:
+                    with self.remove_if_obsolete(old_parent_treeiter):
+                        treeiter = self.treestore_move(parent_treeiter, treeiter)
+
+                # Update data
+                self.devices_treestore.set(treeiter, range(6), [device.path,
+                    device_icon, device.nice_label, device.subsystem, False,
+                    device.name])
+
             row_ref = self.rows[device.path]
 
             if self.options['expanded']:
@@ -429,26 +524,20 @@ class UDevDiscoverGUI(GConfStore):
         self.devices_treestore.clear()
         self.rows = {}
 
+        # Add root element for seats
+        if self.options['multiseat_tree']:
+            self.seats_treeiter = self.devices_treestore.append(None, ['seat://', theme.load_icon('computer', 24, 0), 'Seats', None, False, None])
+            self.rows['seat://'] = Gtk.TreeRowReference.new(self.devices_treestore, self.devices_treestore.get_path(self.seats_treeiter))
+
         for device in devices:
             self.add_new_device(device)
 
     def add_new_device(self, device):
         device_icon = theme.load_icon(device.icon, 24, 0)
-        if device.parent == None:
-            treeiter = self.devices_treestore.append(None, [device.path, 
-                device_icon, device.nice_label, device.subsystem, False, 
-                device.name])
-        else:
-            if self.rows.has_key(device.parent.path):
-                parent_treeiter = self.devices_treestore.get_iter(
-                    self.rows[device.parent.path].get_path())
-                treeiter = self.devices_treestore.append(parent_treeiter, 
-                    [device.path, device_icon, device.nice_label, 
-                    device.subsystem, False, device.name])
-            else:
-                treeiter = self.devices_treestore.append(None, [device.path, 
-                    device_icon, device.nice_label, device.subsystem, False, 
-                    device.name])
+
+        treeiter = self.devices_treestore.append(self.get_device_parent_treeiter(device),
+            [device.path, device_icon, device.nice_label,
+            device.subsystem, False, device.name])
 
         self.rows[device.path] = Gtk.TreeRowReference.new(self.devices_treestore,
             self.devices_treestore.get_path(treeiter))
